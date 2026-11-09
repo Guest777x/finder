@@ -1,0 +1,406 @@
+-- IDONTLOG HOPPER (Christmas)
+-- Finds a public server with 1-2 players in this game and joins it. Press HOP NOW.
+local print = function() end
+local warn  = function() end
+if not game:IsLoaded() then game.Loaded:Wait() end
+pcall(function() if setthreadidentity then setthreadidentity(8) end end)
+local Instance = Instance
+local Instance = Instance
+_G.HOP_X = _G.HOP_X or {}
+do
+    local X = _G.HOP_X
+    local TS = game:GetService("TweenService")
+    local RED   = Color3.fromRGB(222, 28, 44)
+    local SNOW  = Color3.fromRGB(255, 255, 255)
+    local GREEN = Color3.fromRGB(26, 160, 78)
+    local GOLD  = Color3.fromRGB(255, 204, 72)
+    X.RED, X.SNOW, X.GREEN, X.GOLD = RED, SNOW, GREEN, GOLD
+    X.anims = {}
+    X.done  = setmetatable({}, { __mode = "k" })
+
+    local function seq(list)
+        local kp = {}
+        for i, c in ipairs(list) do kp[i] = ColorSequenceKeypoint.new((i - 1) / (#list - 1), c) end
+        return ColorSequence.new(kp)
+    end
+    X.seq = seq
+    X.RING  = seq({ RED, GOLD, SNOW, GREEN, SNOW, RED })
+    X.SHINE = seq({ RED, SNOW, GREEN, SNOW, GOLD, SNOW, RED })
+
+    -- hard-edged stripes, phase-shifted so they scroll (max 18 keypoints)
+    function X.candySeq(n, phase, c1, c2)
+        local cuts = {}
+        for k = 0, n - 1 do cuts[#cuts + 1] = { t = (k / n + phase) % 1, c = (k % 2 == 0) and c1 or c2 } end
+        table.sort(cuts, function(a, b) return a.t < b.t end)
+        local wrapC = cuts[#cuts].c
+        local kp, last, prevC = { ColorSequenceKeypoint.new(0, wrapC) }, 0, wrapC
+        for _, cut in ipairs(cuts) do
+            local t0, t1 = cut.t - 0.002, cut.t
+            if t0 > last + 0.0005 and t1 < 0.999 then
+                kp[#kp + 1] = ColorSequenceKeypoint.new(t0, prevC)
+                kp[#kp + 1] = ColorSequenceKeypoint.new(t1, cut.c)
+                last = t1
+            end
+            prevC = cut.c
+        end
+        kp[#kp + 1] = ColorSequenceKeypoint.new(1, prevC)
+        return ColorSequence.new(kp)
+    end
+
+    function X.add(g, kind, speed, owner)
+        X.anims[#X.anims + 1] = { g = g, k = kind, s = speed or 1, o = owner }
+        return g
+    end
+
+    function X.grad(parent, colorSeq, kind, speed, rot)
+        local g = Instance.new("UIGradient")
+        g.Color = colorSeq; g.Rotation = rot or 0; g.Parent = parent
+        return X.add(g, kind, speed)
+    end
+
+    -- gate (optional): a Frame -> only animates while it's visible (BackgroundTransparency < 1),
+    -- a BillboardGui/ScreenGui -> only while Enabled. Keeps hidden stripes from costing anything.
+    function X.candy(target, gate)
+        local g = Instance.new("UIGradient")
+        g.Rotation = 32
+        g.Color = X.candySeq(8, 0, RED, SNOW)
+        g.Parent = target
+        return X.add(g, "candy", 0.35, gate)
+    end
+    local function gateOpen(o)
+        if not o then return true end
+        if o:IsA("LayerCollector") then return o.Enabled end
+        if o:IsA("GuiObject") then return o.BackgroundTransparency < 0.99 end
+        return true
+    end
+
+    _G.__HOP_ENGINE = (_G.__HOP_ENGINE or 0) + 1
+    local engineToken = _G.__HOP_ENGINE
+    task.spawn(function()
+        while _G.__HOP_ENGINE == engineToken do
+            local t, a = os.clock(), X.anims
+            for i = #a, 1, -1 do
+                local e = a[i]
+                local g = e.g
+                if not g.Parent then
+                    table.remove(a, i)
+                elseif g.Enabled then pcall(function()
+                    if e.k == "rot" then
+                        g.Rotation = (t * 60 * e.s) % 360
+                    elseif e.k == "sweep" then
+                        g.Offset = Vector2.new(((t * 0.3 * e.s) % 2) - 1, 0)
+                    elseif e.k == "candy" then
+                        if gateOpen(e.o) then
+                            g.Color = X.candySeq(8, (t * e.s) % 1, RED, SNOW)
+                        end
+                    end
+                end) end
+            end
+            task.wait(1 / 30)
+        end
+    end)
+
+    local function bubble(b)
+        if X.done[b] then return end
+        X.done[b] = true
+        if b.BackgroundTransparency >= 0.9 then return end
+        local c = b:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+        c.CornerRadius = UDim.new(1, 0); c.Parent = b
+        local shine = Instance.new("Frame")
+        shine.Name = "Shine"; shine.Active = false
+        shine.AnchorPoint = Vector2.new(0.5, 0)
+        shine.Position = UDim2.new(0.5, 0, 0, 2); shine.Size = UDim2.new(1, -10, 0.38, 0)
+        shine.BackgroundColor3 = SNOW; shine.BackgroundTransparency = 0.84
+        shine.BorderSizePixel = 0; shine.ZIndex = b.ZIndex
+        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = shine
+        shine.Parent = b
+        if b:FindFirstChildOfClass("UIScale") then return end
+        local us = Instance.new("UIScale"); us.Parent = b
+        local down = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local up   = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        b.MouseButton1Down:Connect(function() TS:Create(us, down, { Scale = 0.9 }):Play() end)
+        b.MouseButton1Up:Connect(function() TS:Create(us, up, { Scale = 1 }):Play() end)
+        b.MouseLeave:Connect(function() TS:Create(us, up, { Scale = 1 }):Play() end)
+        b.MouseEnter:Connect(function() TS:Create(us, up, { Scale = 1.04 }):Play() end)
+    end
+    X.bubble = bubble
+
+    local function ring(stroke)
+        if X.done[stroke] then return end
+        X.done[stroke] = true
+        stroke.Color = SNOW
+        stroke.Transparency = math.min(stroke.Transparency, 0.1)
+        stroke.Thickness = math.max(stroke.Thickness, 1.6)
+        X.grad(stroke, X.RING, "rot", 1)
+    end
+
+    local function touch(gui, d)
+        if not d.Parent then return end
+        if d:IsA("TextButton") then
+            bubble(d)
+        elseif d:IsA("UIStroke") and d.Parent:IsA("Frame") and d.Parent.Parent == gui then
+            ring(d)
+        end
+    end
+
+    function X.reg(gui)
+        gui.DescendantAdded:Connect(function(d)
+            task.defer(touch, gui, d)
+        end)
+    end
+
+    local _IN = Instance.new
+    Instance = { new = function(className, parent)
+        local o = _IN(className, parent)
+        if className == "ScreenGui" then X.reg(o) end
+        return o
+    end }
+end
+
+_G.HOP_xmasTitle = function(lbl)
+    local X = _G.HOP_X
+    X.grad(lbl, X.SHINE, "sweep", 1, 0)
+    lbl.TextStrokeColor3 = Color3.fromRGB(8, 32, 18)
+    lbl.TextStrokeTransparency = 0.35
+    task.defer(function() lbl.TextColor3 = Color3.fromRGB(255, 255, 255) end)
+end
+
+
+local Players         = game:GetService("Players")
+local HttpService     = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer     = Players.LocalPlayer
+
+-- ============================================================
+-- CONFIG
+-- ============================================================
+local PLACE_ID_OVERRIDE = nil   -- put the game's place id here to hop in a different place; nil = this game
+local PLACE_ID    = PLACE_ID_OVERRIDE or game.PlaceId
+local MAX_PAGES   = 12          -- 12 x 100 servers per search, lowest player counts first
+local VISIT_TTL   = 1800        -- don't rejoin a server you hopped into in the last 30 min
+local JOIN_TIMEOUT = 14         -- seconds to wait for a teleport before trying the next server
+local FOLDER      = "IdontlogHopper"
+local VISITED_FILE = FOLDER .. "/visited.json"
+
+local req = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+local HOSTS = { "games.roblox.com", "games.roproxy.com" }
+
+local function hasFS() return writefile and readfile and isfile and makefolder and isfolder end
+local visited = {}
+local function loadVisited()
+    if not hasFS() then return end
+    pcall(function()
+        if isfile(VISITED_FILE) then
+            local d = HttpService:JSONDecode(readfile(VISITED_FILE))
+            local now = os.time()
+            for id, t in pairs(d) do if type(t) == "number" and now - t < VISIT_TTL then visited[id] = t end end
+        end
+    end)
+end
+local function saveVisited()
+    if not hasFS() then return end
+    pcall(function()
+        if not isfolder(FOLDER) then makefolder(FOLDER) end
+        writefile(VISITED_FILE, HttpService:JSONEncode(visited))
+    end)
+end
+loadVisited()
+
+-- pure filter: servers with minP..maxP players, not this server, not recently visited, room to join
+local function pickServers(list, minP, maxP, myJob, seen, now)
+    local out = {}
+    for _, s in ipairs(list or {}) do
+        local pl, mx = tonumber(s.playing), tonumber(s.maxPlayers)
+        if s.id and pl and pl >= minP and pl <= maxP and s.id ~= myJob
+            and not (seen[s.id] and now - seen[s.id] < VISIT_TTL) and (not mx or pl < mx) then
+            out[#out + 1] = s
+        end
+    end
+    return out
+end
+
+local function fetchPage(cursor)
+    if not req then return nil, "no http request function in this executor" end
+    for _, host in ipairs(HOSTS) do
+        local url = ("https://%s/v1/games/%d/servers/Public?sortOrder=Asc&excludeFullGames=true&limit=100%s")
+            :format(host, PLACE_ID, cursor and ("&cursor=" .. cursor) or "")
+        for attempt = 1, 3 do
+            local ok, res = pcall(req, { Url = url, Method = "GET" })
+            if ok and res then
+                local code = res.StatusCode or res.status_code
+                if code == 200 then
+                    local okj, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+                    if okj and type(data) == "table" then return data end
+                elseif code == 429 then
+                    task.wait(2.5 * attempt)
+                else
+                    break
+                end
+            else
+                break
+            end
+        end
+    end
+    return nil, "server list unreachable"
+end
+
+-- ============================================================
+-- UI  (Christmas)
+-- ============================================================
+local C = {
+    BG = Color3.fromRGB(11, 27, 19), SURF = Color3.fromRGB(12, 31, 21), SURF2 = Color3.fromRGB(18, 46, 31),
+    TEXT = Color3.fromRGB(246, 250, 255), DIM = Color3.fromRGB(150, 186, 166),
+    RED = Color3.fromRGB(240, 32, 44), RED2 = Color3.fromRGB(190, 27, 38),
+    GREEN = Color3.fromRGB(96, 214, 128), GREEN2 = Color3.fromRGB(30, 128, 64), GOLD = Color3.fromRGB(255, 204, 72),
+}
+local X = _G.HOP_X
+local F_BOLD, F_MED, F_FUN = Enum.Font.GothamBold, Enum.Font.GothamMedium, Enum.Font.FredokaOne
+
+local function mk(class, parent, props)
+    local o = Instance.new(class)
+    for k, v in pairs(props or {}) do o[k] = v end
+    o.Parent = parent
+    return o
+end
+local function round(o, r) return mk("UICorner", o, { CornerRadius = UDim.new(0, r) }) end
+local function stroke(o, col, th, tr) return mk("UIStroke", o, { Color = col, Thickness = th, Transparency = tr }) end
+local function txt(parent, text, size, col, font, props)
+    local p = { BackgroundTransparency = 1, Text = text, TextSize = size, TextColor3 = col, Font = font,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5 }
+    for k, v in pairs(props or {}) do p[k] = v end
+    return mk("TextLabel", parent, p)
+end
+local function inputBox(parent, text, props)
+    local p = { BackgroundColor3 = C.SURF, BorderSizePixel = 0, Text = text, Font = F_BOLD, TextSize = 14, TextColor3 = C.TEXT,
+        ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5 }
+    for k, v in pairs(props or {}) do p[k] = v end
+    local b = mk("TextBox", parent, p)
+    round(b, 10); stroke(b, C.RED, 1, 0.5)
+    return b
+end
+
+local hui = gethui and gethui() or game:GetService("CoreGui")
+pcall(function() local o = hui:FindFirstChild("IdontlogHopper"); if o then o:Destroy() end end)
+local IS_TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled and not UserInputService.MouseEnabled
+local screen = mk("ScreenGui", hui, { Name = "IdontlogHopper", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 999999,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+local frame = mk("Frame", screen, { Size = UDim2.fromOffset(330, 262), Position = UDim2.new(0.5, -165, 0.5, -131),
+    BackgroundColor3 = C.BG, BorderSizePixel = 0, ClipsDescendants = true })
+round(frame, 18); stroke(frame, C.RED, 1.6, 0.1)
+mk("UIGradient", frame, { Color = ColorSequence.new(Color3.fromRGB(15, 40, 28), Color3.fromRGB(7, 20, 14)), Rotation = 125 })
+if IS_TOUCH then mk("UIScale", frame, { Scale = 0.8 }) end
+
+local openBtn = mk("TextButton", screen, { Size = UDim2.fromOffset(46, 46), Position = UDim2.new(0, 10, 0.5, -23), BackgroundColor3 = C.RED2,
+    BorderSizePixel = 0, Text = "🎄", TextSize = 22, Font = F_FUN, AutoButtonColor = false, Visible = false, ZIndex = 20 })
+
+local header = mk("Frame", frame, { Size = UDim2.new(1, 0, 0, 48), BackgroundColor3 = C.SURF, BackgroundTransparency = 0.2, BorderSizePixel = 0, ZIndex = 2 })
+local accent = mk("Frame", header, { Size = UDim2.fromOffset(4, 26), Position = UDim2.fromOffset(16, 11), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 3 })
+round(accent, 2); X.candy(accent, accent)
+local title = txt(header, "Idontlog Hopper", 18, C.TEXT, F_FUN, { Position = UDim2.fromOffset(30, 10), Size = UDim2.fromOffset(200, 28) })
+_G.HOP_xmasTitle(title)
+local closeBtn = mk("TextButton", header, { Text = "X", Font = F_FUN, TextSize = 12, TextColor3 = C.TEXT, AutoButtonColor = false,
+    BackgroundColor3 = C.RED2, BorderSizePixel = 0, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(28, 28), ZIndex = 4 })
+local tinsel = mk("Frame", frame, { Size = UDim2.new(1, 0, 0, 2), Position = UDim2.fromOffset(0, 48), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 3 })
+X.grad(tinsel, X.SHINE, "sweep", 1, 0)
+closeBtn.MouseButton1Click:Connect(function() frame.Visible = false; openBtn.Visible = true end)
+openBtn.MouseButton1Click:Connect(function() frame.Visible = true; openBtn.Visible = false end)
+
+do  -- drag by header
+    local dragging, si, sp
+    header.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging, si, sp = true, i.Position, frame.Position
+            i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - si
+            frame.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+        end
+    end)
+end
+
+local body = mk("Frame", frame, { Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 1, -50), BackgroundTransparency = 1 })
+mk("UIPadding", body, { PaddingLeft = UDim.new(0, 18), PaddingRight = UDim.new(0, 18), PaddingTop = UDim.new(0, 16), PaddingBottom = UDim.new(0, 16) })
+
+local hopBtn = mk("TextButton", body, { Size = UDim2.new(1, 0, 0, 58), BackgroundColor3 = C.RED2, BorderSizePixel = 0, Text = "HOP NOW",
+    Font = F_FUN, TextSize = 24, TextColor3 = C.TEXT, AutoButtonColor = false, ZIndex = 5 })
+local hopStroke = mk("UIStroke", hopBtn, { Color = Color3.new(1, 1, 1), Thickness = 2, Transparency = 0.05 })
+X.grad(hopStroke, X.RING, "rot", 1)
+
+txt(body, "MIN PLAYERS", 10, C.DIM, F_BOLD, { Position = UDim2.fromOffset(2, 74), Size = UDim2.new(0.5, -6, 0, 14) })
+txt(body, "MAX PLAYERS", 10, C.DIM, F_BOLD, { Position = UDim2.new(0.5, 8, 0, 74), Size = UDim2.new(0.5, -6, 0, 14) })
+local minBox = inputBox(body, "1", { Position = UDim2.fromOffset(0, 90), Size = UDim2.new(0.5, -6, 0, 34) })
+local maxBox = inputBox(body, "2", { Position = UDim2.new(0.5, 6, 0, 90), Size = UDim2.new(0.5, -6, 0, 34) })
+
+local statusLbl = txt(body, "ready, press HOP NOW", 12, C.GOLD, F_MED, { Position = UDim2.fromOffset(2, 134), Size = UDim2.new(1, -4, 0, 34),
+    TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+local function setStatus(t, col) statusLbl.Text = t; statusLbl.TextColor3 = col or C.GOLD end
+
+local function readRange()
+    local a = math.clamp(math.floor(tonumber(minBox.Text) or 1), 1, 100)
+    local b = math.clamp(math.floor(tonumber(maxBox.Text) or 2), 1, 100)
+    if b < a then a, b = b, a end
+    minBox.Text, maxBox.Text = tostring(a), tostring(b)
+    return a, b
+end
+
+-- ============================================================
+-- HOP LOGIC
+-- ============================================================
+local busy = false
+local joinFailed = false
+TeleportService.TeleportInitFailed:Connect(function(player) if player == LocalPlayer then joinFailed = true end end)
+
+local function shuffle(t)
+    for i = #t, 2, -1 do local j = math.random(i); t[i], t[j] = t[j], t[i] end
+    return t
+end
+
+local function hop()
+    if busy then return end
+    busy = true
+    hopBtn.Text = "SCANNING..."
+    local minP, maxP = readRange()
+    local found, cursor, pages, scanned = {}, nil, 0, 0
+    while pages < MAX_PAGES do
+        pages += 1
+        setStatus(("scanning page %d  -  %d servers checked, %d match"):format(pages, scanned, #found))
+        local data, err = fetchPage(cursor)
+        if not data then
+            if #found == 0 then setStatus(err or "couldn't read the server list", C.RED); hopBtn.Text = "HOP NOW"; busy = false; return end
+            break
+        end
+        scanned += #(data.data or {})
+        for _, s in ipairs(pickServers(data.data, minP, maxP, game.JobId, visited, os.time())) do found[#found + 1] = s end
+        local list = data.data or {}
+        local lastPlaying = list[#list] and tonumber(list[#list].playing) or 0
+        if #found >= 25 or not data.nextPageCursor or lastPlaying > maxP then break end  -- sorted ascending: past maxP, nothing more to find
+        cursor = data.nextPageCursor
+        task.wait(0.35)
+    end
+    if #found == 0 then
+        setStatus(("no %d-%d player servers right now (%d checked), try again"):format(minP, maxP, scanned), C.RED)
+        hopBtn.Text = "HOP NOW"; busy = false; return
+    end
+    shuffle(found)
+    for i, s in ipairs(found) do
+        hopBtn.Text = "JOINING..."
+        setStatus(("found %d  -  joining server %d/%d  (%d players)"):format(#found, i, #found, tonumber(s.playing) or 0), C.GREEN)
+        visited[s.id] = os.time(); saveVisited()
+        joinFailed = false
+        local ok = pcall(function() TeleportService:TeleportToPlaceInstance(PLACE_ID, s.id, LocalPlayer) end)
+        local t0 = os.clock()
+        while ok and not joinFailed and os.clock() - t0 < JOIN_TIMEOUT do task.wait(0.25) end
+        -- still here after the timeout / a failure: that one was full or gone, try the next
+        setStatus("that one fell through, trying the next", C.GOLD)
+        task.wait(0.4)
+    end
+    setStatus("every match fell through, hit HOP NOW again", C.RED)
+    hopBtn.Text = "HOP NOW"; busy = false
+end
+hopBtn.MouseButton1Click:Connect(function() task.spawn(hop) end)
+
+if not req then setStatus("this executor has no http request function, can't read servers", C.RED) end
